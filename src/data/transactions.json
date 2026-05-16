@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "id": "df33fe7c-62a6-4da9-9c00-db8e1edfccdf",
+    "userId": "e6401d40-38cf-43ec-805c-9a08e55955c7",
+    "type": "expense",
+    "amount": 100.5,
+    "category": "Food",
+    "date": "2024-01-15",
+    "description": "Lunch",
+    "createdAt": "2026-05-15T15:48:02.279Z"
+  },
+  {
+    "id": "bbf35b34-9b11-4f34-8c97-c0707f662b21",
+    "userId": "e6401d40-38cf-43ec-805c-9a08e55955c7",
+    "type": "expense",
+    "amount": 500,
+    "category": "Food",
+    "date": "2026-05-15",
+    "description": "Lunch at restaurant",
+    "createdAt": "2026-05-15T15:54:58.018Z"
+  }
+]

@@ -17,6 +17,9 @@ A RESTful API for personal finance management built with Node.js and Express.
 - ✅ Testing
 - ✅ CORS Support
 - ✅ Reusable Services
+- ✅ **AI-Powered Auto-Categorization**
+- ✅ **Personalized Saving Tips**
+- ✅ **Spending Trend Analysis**
 
 ## Project Structure
 
@@ -159,7 +162,3 @@ Content-Type: application/json
 GET /summary
 Authorization: Bearer TOKEN
 ```
-
-## License
-
-ISC

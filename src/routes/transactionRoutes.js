@@ -17,7 +17,7 @@ router.use(authMiddleware);
 router.post("/", validator, createTransaction);
 router.get("/", getTransactions);
 router.get("/:id", getTransaction);
-router.patch("/:id", updateTransaction);
+router.patch("/:id", validator, updateTransaction);
 router.delete("/:id", deleteTransaction);
 
 module.exports = router;

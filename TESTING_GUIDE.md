@@ -14,7 +14,7 @@ This guide provides comprehensive instructions for testing the FinEdge Personal 
 
 ## Automated Testing
 
-The project includes a comprehensive test suite with **27 automated tests** using Jest and Supertest.
+The project includes a comprehensive test suite with **36 automated tests** using Jest and Supertest.
 
 ### Running Tests
 
@@ -48,29 +48,39 @@ The automated test suite covers:
 2. **User Registration (5 tests)**
    - Successful registration with valid data
    - Registration with minimal data
-   - Handling missing name field
-   - Handling missing email field
-   - Failure with missing password field
+   - Validation for missing name field
+   - Validation for missing email field
+   - Validation for missing password field
 
-3. **Transaction Routes - Authenticated (15 tests)**
+3. **Transaction Routes - Authenticated (18 tests)**
    - Authentication requirements (no token, invalid token)
    - Creating transactions with valid/invalid data
    - Validation tests (missing fields, invalid types, negative/zero amounts)
    - Retrieving all transactions
    - Retrieving specific transactions
-   - Updating transactions
+   - Updating transactions with validation
    - Deleting transactions
    - Handling non-existent transactions
 
 4. **Summary Route - Authenticated (2 tests)**
    - Authentication requirements
-   - Financial summary generation
+   - Financial summary generation with caching
 
-5. **Error Handling (2 tests)**
+5. **Budget Routes - Authenticated (9 tests)** ✨ NEW
+   - Authentication requirements
+   - Creating budgets with monthly goals and savings targets
+   - Validation tests (missing fields, negative values)
+   - Retrieving all budgets
+   - Retrieving specific budgets
+   - Updating budgets
+   - Deleting budgets
+   - Handling non-existent budgets
+
+6. **Error Handling (2 tests)**
    - 404 for non-existent routes
    - Invalid JSON handling
 
-6. **Rate Limiting (1 test)**
+7. **Rate Limiting (1 test)**
    - Multiple request handling
 
 ### Test Structure
@@ -108,7 +118,7 @@ The server runs on `http://localhost:5000`
 }
 ```
 
-### Step 3: Register a User
+### Step 3: Register a User (Get Authentication Token)
 
 **Request:**
 - Method: `POST`
@@ -134,12 +144,29 @@ The server runs on `http://localhost:5000`
       "email": "john@example.com",
       "password": "hashed_password"
     },
-    "token": "jwt_token_here"
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InV1aWQiLCJlbWFpbCI6ImpvaG5AZXhhbXBsZS5jb20iLCJpYXQiOjE2MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
   }
 }
 ```
 
-**Important:** Save the `token` from the response for authenticated requests.
+**🔑 IMPORTANT - How to Get Your Token:**
+
+1. **Copy the token value** from the response above (the long string after `"token":`)
+2. **Save it** - You'll need this token for ALL authenticated requests (transactions, budgets, summary)
+3. **Use it in the Authorization header** as: `Bearer YOUR_TOKEN_HERE`
+
+**Example:**
+If your token is: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+Then your Authorization header should be:
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Note:** 
+- The token expires in 24 hours
+- Each user registration creates a new token
+- Keep your token secure - it authenticates you to the API
 
 ### Step 4: Create a Transaction (Authenticated)
 
@@ -271,6 +298,103 @@ The server runs on `http://localhost:5000`
 }
 ```
 
+### Step 9: Create a Budget (Authenticated) ✨ NEW
+
+**Request:**
+- Method: `POST`
+- URL: `http://localhost:5000/budgets`
+- Headers:
+  - `Content-Type: application/json`
+  - `Authorization: Bearer YOUR_TOKEN_HERE`
+- Body (JSON):
+```json
+{
+  "monthlyGoal": 50000,
+  "savingsTarget": 10000,
+  "month": "2026-05"
+}
+```
+
+**Expected Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "userId": "user_uuid",
+    "monthlyGoal": 50000,
+    "savingsTarget": 10000,
+    "month": "2026-05",
+    "createdAt": "2026-05-15T12:00:00.000Z"
+  }
+}
+```
+
+### Step 10: Get All Budgets (Authenticated) ✨ NEW
+
+**Request:**
+- Method: `GET`
+- URL: `http://localhost:5000/budgets`
+- Headers: `Authorization: Bearer YOUR_TOKEN_HERE`
+
+**Expected Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "userId": "user_uuid",
+      "monthlyGoal": 50000,
+      "savingsTarget": 10000,
+      "month": "2026-05",
+      "createdAt": "2026-05-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Step 11: Get Enhanced Summary with Filters ✨ NEW
+
+**Request:**
+- Method: `GET`
+- URL: `http://localhost:5000/summary?category=Food&includeTrends=true&includeCategories=true`
+- Headers: `Authorization: Bearer YOUR_TOKEN_HERE`
+
+**Expected Response (200 OK):**
+```json
+{
+  "success": true,
+  "cached": false,
+  "filters": {
+    "category": "Food",
+    "startDate": null,
+    "endDate": null
+  },
+  "data": {
+    "totalIncome": 0,
+    "totalExpenses": 100.5,
+    "balance": -100.5,
+    "monthlyTrends": [
+      {
+        "month": "2024-01",
+        "income": 0,
+        "expenses": 100.5,
+        "balance": -100.5
+      }
+    ],
+    "categoryBreakdown": [
+      {
+        "category": "Food",
+        "income": 0,
+        "expenses": 100.5,
+        "total": -100.5
+      }
+    ]
+  }
+}
+```
+
 ---
 
 ## API Endpoints Reference
@@ -296,7 +420,74 @@ The server runs on `http://localhost:5000`
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/summary` | Get financial summary | Yes |
+| GET | `/summary` | Get financial summary (with optional filters) | Yes |
+
+**Query Parameters for Summary:**
+- `category` (optional): Filter by category name
+- `startDate` (optional): Start date (YYYY-MM-DD)
+- `endDate` (optional): End date (YYYY-MM-DD)
+- `includeTrends` (optional): Include monthly trends (true/false)
+- `includeCategories` (optional): Include category breakdown (true/false)
+
+### Budgets ✨ NEW
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/budgets` | Create budget | Yes |
+| GET | `/budgets` | Get all budgets | Yes |
+| GET | `/budgets/:id` | Get specific budget | Yes |
+| PATCH | `/budgets/:id` | Update budget | Yes |
+| DELETE | `/budgets/:id` | Delete budget | Yes |
+
+---
+
+## How to Get and Use Your Authentication Token
+
+### Quick Guide:
+
+1. **Register a new user** (Step 3 above)
+2. **Copy the token** from the response
+3. **Use it in all authenticated requests** by adding this header:
+   ```
+   Authorization: Bearer YOUR_COPIED_TOKEN
+   ```
+
+### Example Flow:
+
+**Step 1: Register and Get Token**
+```bash
+curl -X POST http://localhost:5000/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John","email":"john@test.com","password":"pass123"}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "user": {...},
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+**Step 2: Copy the Token**
+Copy everything after `"token":` (without the quotes)
+
+**Step 3: Use Token in Requests**
+```bash
+curl http://localhost:5000/transactions \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### In Postman:
+
+1. **Register user** → Copy the `token` value from response
+2. **For each authenticated request:**
+   - Go to **Headers** tab
+   - Add header: `Authorization`
+   - Value: `Bearer YOUR_TOKEN` (with space after Bearer)
 
 ---
 

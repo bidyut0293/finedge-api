@@ -7,16 +7,19 @@ const app = require("../app");
 // Paths to data files
 const usersDataPath = path.join(__dirname, "../data/users.json");
 const transactionsDataPath = path.join(__dirname, "../data/transactions.json");
+const budgetsDataPath = path.join(__dirname, "../data/budgets.json");
 
 // Store token for authenticated requests
 let authToken = "";
 let testUserId = "";
 let testTransactionId = "";
+let testBudgetId = "";
 
 // Helper to reset data files to empty state
 const resetDataFiles = () => {
   fs.writeFileSync(usersDataPath, "[]");
   fs.writeFileSync(transactionsDataPath, "[]");
+  fs.writeFileSync(budgetsDataPath, "[]");
 };
 
 // Reset data before all tests
@@ -68,7 +71,7 @@ describe("User Registration Route", () => {
     const minimalUser = {
       name: "Minimal User",
       email: "minimal@example.com",
-      password: "pass"
+      password: "password"
     };
 
     const response = await request(app).post("/users").send(minimalUser);
@@ -78,7 +81,7 @@ describe("User Registration Route", () => {
     expect(response.body.data.user.name).toBe(minimalUser.name);
   });
 
-  test("POST /users - should handle missing name field", async () => {
+  test("POST /users - should fail with missing name field", async () => {
     const invalidUser = {
       email: "noname@example.com",
       password: "password123"
@@ -86,12 +89,13 @@ describe("User Registration Route", () => {
 
     const response = await request(app).post("/users").send(invalidUser);
 
-    // The API will still create user with undefined name
-    expect(response.statusCode).toBe(201);
-    expect(response.body.success).toBe(true);
+    // Now validation is enforced
+    expect(response.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("required");
   });
 
-  test("POST /users - should handle missing email field", async () => {
+  test("POST /users - should fail with missing email field", async () => {
     const invalidUser = {
       name: "No Email User",
       password: "password123"
@@ -99,9 +103,10 @@ describe("User Registration Route", () => {
 
     const response = await request(app).post("/users").send(invalidUser);
 
-    // The API will still create user with undefined email
-    expect(response.statusCode).toBe(201);
-    expect(response.body.success).toBe(true);
+    // Now validation is enforced
+    expect(response.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("required");
   });
 
   test("POST /users - should fail with missing password field", async () => {
@@ -112,9 +117,10 @@ describe("User Registration Route", () => {
 
     const response = await request(app).post("/users").send(invalidUser);
 
-    // bcrypt.hash fails with undefined password, causing 500 error
-    expect(response.statusCode).toBe(500);
+    // Now validation catches this before bcrypt
+    expect(response.statusCode).toBe(400);
     expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("required");
   });
 });
 
@@ -290,9 +296,11 @@ describe("Transaction Routes (Authenticated)", () => {
     expect(response.body.success).toBe(false);
   });
 
-  test("PATCH /transactions/:id - should update a transaction", async () => {
+  test("PATCH /transactions/:id - should update a transaction with valid data", async () => {
     const updateData = {
+      type: "expense",
       amount: 150.75,
+      category: "Food",
       description: "Updated lunch description"
     };
 
@@ -307,10 +315,12 @@ describe("Transaction Routes (Authenticated)", () => {
     expect(response.body.data.description).toBe(updateData.description);
   });
 
-  test("PATCH /transactions/:id - should allow updating with any values (no validation on PATCH)", async () => {
-    // The validator middleware is only applied to POST, not PATCH
+  test("PATCH /transactions/:id - should fail validation with invalid data", async () => {
+    // Now PATCH also has validation middleware
     const updateData = {
-      amount: -5
+      type: "expense",
+      amount: -5,
+      category: "Test"
     };
 
     const response = await request(app)
@@ -318,10 +328,10 @@ describe("Transaction Routes (Authenticated)", () => {
       .set("Authorization", `Bearer ${authToken}`)
       .send(updateData);
 
-    // PATCH doesn't have validation middleware, so it allows the update
-    expect(response.statusCode).toBe(200);
-    expect(response.body.success).toBe(true);
-    expect(response.body.data.amount).toBe(updateData.amount);
+    // PATCH now has validation middleware
+    expect(response.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("Amount must be greater than 0");
   });
 
   test("DELETE /transactions/:id - should delete a transaction", async () => {
@@ -420,5 +430,134 @@ describe("Rate Limiting", () => {
       const response = await request(app).get("/health");
       expect(response.statusCode).toBe(200);
     }
+  });
+});
+
+describe("Budget Routes (Authenticated)", () => {
+  test("GET /budgets - should return 401 without token", async () => {
+    const response = await request(app).get("/budgets");
+
+    expect(response.statusCode).toBe(401);
+    expect(response.body.message).toBe("No token provided");
+  });
+
+  test("POST /budgets - should create a budget successfully", async () => {
+    const budget = {
+      monthlyGoal: 50000,
+      savingsTarget: 10000,
+      month: "2026-05"
+    };
+
+    const response = await request(app)
+      .post("/budgets")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send(budget);
+
+    expect(response.statusCode).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toHaveProperty("id");
+    expect(response.body.data.monthlyGoal).toBe(budget.monthlyGoal);
+    expect(response.body.data.savingsTarget).toBe(budget.savingsTarget);
+    expect(response.body.data.month).toBe(budget.month);
+
+    testBudgetId = response.body.data.id;
+  });
+
+  test("POST /budgets - should fail validation without monthlyGoal", async () => {
+    const invalidBudget = {
+      savingsTarget: 10000,
+      month: "2026-05"
+    };
+
+    const response = await request(app)
+      .post("/budgets")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send(invalidBudget);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("required");
+  });
+
+  test("POST /budgets - should fail validation with negative monthlyGoal", async () => {
+    const invalidBudget = {
+      monthlyGoal: -5000,
+      savingsTarget: 10000,
+      month: "2026-05"
+    };
+
+    const response = await request(app)
+      .post("/budgets")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send(invalidBudget);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("greater than 0");
+  });
+
+  test("GET /budgets - should retrieve all budgets", async () => {
+    const response = await request(app)
+      .get("/budgets")
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("GET /budgets/:id - should retrieve a specific budget", async () => {
+    const response = await request(app)
+      .get(`/budgets/${testBudgetId}`)
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.id).toBe(testBudgetId);
+  });
+
+  test("GET /budgets/:id - should return 404 for non-existent budget", async () => {
+    const fakeId = "12345678-1234-1234-1234-123456789012";
+    const response = await request(app)
+      .get(`/budgets/${fakeId}`)
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body.success).toBe(false);
+  });
+
+  test("PATCH /budgets/:id - should update a budget", async () => {
+    const updateData = {
+      monthlyGoal: 60000,
+      savingsTarget: 15000
+    };
+
+    const response = await request(app)
+      .patch(`/budgets/${testBudgetId}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .send(updateData);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.monthlyGoal).toBe(updateData.monthlyGoal);
+    expect(response.body.data.savingsTarget).toBe(updateData.savingsTarget);
+  });
+
+  test("DELETE /budgets/:id - should delete a budget", async () => {
+    const response = await request(app)
+      .delete(`/budgets/${testBudgetId}`)
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.message).toBe("Budget deleted");
+
+    // Verify it's gone
+    const getResponse = await request(app)
+      .get(`/budgets/${testBudgetId}`)
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(getResponse.statusCode).toBe(404);
   });
 });

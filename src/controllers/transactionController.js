@@ -1,15 +1,25 @@
 const transactionService = require("../services/transactionService");
+const { autoCategorizeExpense } = require("../services/aiService");
 
 exports.createTransaction = async (req, res, next) => {
   try {
+    const transactionData = { ...req.body };
+    
+    // Auto-categorize if category not provided and description exists
+    if (!transactionData.category && transactionData.description && transactionData.type === 'expense') {
+      transactionData.category = autoCategorizeExpense(transactionData.description);
+      transactionData.autoCategorized = true;
+    }
+    
     const transaction = await transactionService.addTransaction(
-      req.body,
+      transactionData,
       req.user.id
     );
 
     res.status(201).json({
       success: true,
-      data: transaction
+      data: transaction,
+      autoCategorized: transactionData.autoCategorized || false
     });
   } catch (error) {
     next(error);
