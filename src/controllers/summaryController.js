@@ -1,10 +1,18 @@
 const transactionService = require("../services/transactionService");
-const { calculateSummary } = require("../services/analyticsService");
+const {
+  calculateSummary,
+  filterByCategory,
+  filterByDateRange,
+  calculateMonthlyTrends,
+  getCategoryBreakdown
+} = require("../services/analyticsService");
 const { getCache, setCache } = require("../services/cacheService");
 
 exports.getSummary = async (req, res, next) => {
   try {
-    const cacheKey = `summary-${req.user.id}`;
+    const { category, startDate, endDate, includeTrends, includeCategories } = req.query;
+    
+    const cacheKey = `summary-${req.user.id}-${category || 'all'}-${startDate || ''}-${endDate || ''}`;
 
     const cached = getCache(cacheKey);
 
@@ -16,18 +24,37 @@ exports.getSummary = async (req, res, next) => {
       });
     }
 
-    const transactions = await transactionService.getTransactions(
-      req.user.id
-    );
+    let transactions = await transactionService.getTransactions(req.user.id);
+
+    // Apply filters
+    if (category) {
+      transactions = filterByCategory(transactions, category);
+    }
+
+    if (startDate && endDate) {
+      transactions = filterByDateRange(transactions, startDate, endDate);
+    }
 
     const summary = calculateSummary(transactions);
+    
+    // Add optional analytics
+    const result = { ...summary };
+    
+    if (includeTrends === 'true') {
+      result.monthlyTrends = calculateMonthlyTrends(transactions);
+    }
+    
+    if (includeCategories === 'true') {
+      result.categoryBreakdown = getCategoryBreakdown(transactions);
+    }
 
-    setCache(cacheKey, summary, process.env.CACHE_TTL);
+    setCache(cacheKey, result, process.env.CACHE_TTL);
 
     res.json({
       success: true,
       cached: false,
-      data: summary
+      filters: { category, startDate, endDate },
+      data: result
     });
   } catch (error) {
     next(error);

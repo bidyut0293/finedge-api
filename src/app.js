@@ -8,6 +8,8 @@ const rateLimiter = require("./middleware/rateLimiter");
 const userRoutes = require("./routes/userRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const summaryRoutes = require("./routes/summaryRoutes");
+const budgetRoutes = require("./routes/budgetRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
 const app = express();
 
@@ -26,6 +28,8 @@ app.get("/health", (req, res) => {
 app.use("/users", userRoutes);
 app.use("/transactions", transactionRoutes);
 app.use("/summary", summaryRoutes);
+app.use("/budgets", budgetRoutes);
+app.use("/ai", aiRoutes);
 
 app.use(errorHandler);
 
